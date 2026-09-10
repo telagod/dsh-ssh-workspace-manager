@@ -1,0 +1,50 @@
+{
+  "name": "dsh-ssh-workspace-manager",
+  "version": "0.2.0",
+  "description": "First-class SSH remote page: bind workspaces to hosts and run exec/sync/compose",
+  "license": "MIT",
+  "author": "telagod",
+  "private": true,
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/telagod/dsh-ssh-workspace-manager.git"
+  },
+  "bugs": {
+    "url": "https://github.com/telagod/dsh-ssh-workspace-manager/issues"
+  },
+  "homepage": "https://github.com/telagod/dsh-ssh-workspace-manager#readme",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "ssh",
+    "remote",
+    "deploy"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./remote": "./lib/typert.remote-client.js",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "node --test lib/ssh.test.js lib/client.test.js"
+  },
+  "files": ["lib", "README.md", "LICENSE"]
+}

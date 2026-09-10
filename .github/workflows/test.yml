@@ -1,0 +1,20 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --check lib/index.js
+      - run: node --check lib/client.js
+      - run: node --check lib/typert.host.js
+      - run: node --check lib/typert.remote-client.js
+      - run: node --test lib/ssh.test.js lib/client.test.js
