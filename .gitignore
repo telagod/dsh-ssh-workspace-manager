@@ -1,8 +1,5 @@
 node_modules/
 
-# sibling repository (dsh-ledger-compact)
-dsh-ledger-compact/
-
 # scratch files that share this working directory
 *.log
 bicycle-*.html
