@@ -1,5 +1,9 @@
 # DSH SSH Workspace Manager
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![dsh-plugin](https://img.shields.io/badge/dsh-plugin-111111)](https://github.com/topics/dsh-plugin)
+[![test](https://github.com/telagod/dsh-ssh-workspace-manager/actions/workflows/test.yml/badge.svg)](https://github.com/telagod/dsh-ssh-workspace-manager/actions/workflows/test.yml)
+
 配套的文本模型快压插件在另一个仓库：[telagod/dsh-ledger-compact](https://github.com/telagod/dsh-ledger-compact)（`/fast-compact`，不打图、不调模型）。
 
 Web profile 插件：人只负责 SSH 主机和连通；绑定、远端执行、同步、Compose 由 Agent 完成。
