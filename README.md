@@ -1,88 +1,168 @@
-# DSH SSH Workspace Manager
+# dsh-ssh-workspace-manager
+
+English · [中文](README.zh.md)
+
+**dsh-plugin** for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness). An **SSH remote** page in Settings — and the agent tools that use it. A human adds hosts and keys; the agent binds the current workspace, runs commands, syncs, and drives compose.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![dsh-plugin](https://img.shields.io/badge/dsh-plugin-111111)](https://github.com/topics/dsh-plugin)
 [![test](https://github.com/telagod/dsh-ssh-workspace-manager/actions/workflows/test.yml/badge.svg)](https://github.com/telagod/dsh-ssh-workspace-manager/actions/workflows/test.yml)
 
-配套的文本模型快压插件在另一个仓库：[telagod/dsh-ledger-compact](https://github.com/telagod/dsh-ledger-compact)（`/fast-compact`，不打图、不调模型）。
+Companion plugin for plain-text compaction: [telagod/dsh-ledger-compact](https://github.com/telagod/dsh-ledger-compact) (`/fast-compact`, no image, no model call).
 
-Web profile 插件：人只负责 SSH 主机和连通；绑定、远端执行、同步、Compose 由 Agent 完成。
+---
 
-设置页与「通用」「模型」同级（侧栏「SSH 远程」）。
+## Why
 
-## 设置页
+"Deploy this to the server" is normally a conversation the agent cannot finish: it does not know the host, it guesses a path, and it shells out to `ssh` with a command the sandbox may refuse. The facts that decide the outcome — which host, which directory, which runtime — belong in settings, not in a prompt.
 
-顶部只留标题和「重新加载」图标，正文分三个 Tab：
+This plugin puts them there, once:
 
-- **服务器**：紧凑卡片，第一行是名称 + `user@host:port`（带复制）+ 右侧图标按钮（测试连接 / 探测主机 / 编辑 / 删除），第二行徽章显示面板、认证方式、跳板、超时、保活、known_hosts、关联数；探测后追加 OS（悬停看内核）、容器运行时、识别到的面板、容器数。结果框就地展开。
-- **关联**：按 Workspace 分组（标题 + 本地路径 + 条数），每行是角色徽章、默认标记、服务器、远程目录，以及运行时 / Compose / 排除项徽章，右侧图标按钮（复制路径 / 编辑 / 解除）。
-- **偏好**：新关联默认环境 / 运行时 / Compose 文件，新主机默认超时 / 保活 / known_hosts / 登录 shell，以及会话标题栏芯片开关。
+- **The human gets a page.** Add a host, pick agent-or-key auth, press **Test connection**, press **Inspect**. No binding form, no commands to type.
+- **The agent gets tools.** `ssh_status` reads the same facts, `ssh_bind` records a target for the current workspace, and the rest run work through them — no ad-hoc `ssh`, no path guessing.
+- **The mount is workspace-scoped.** A binding is (workspace → host → remote directory), with its runtime, compose file and exclude list attached, so "the project on 38" is a fact rather than a re-derivation every turn.
 
-主机 + 关联超过 4 条时，Tab 行右侧出现筛选框（只过滤当前 Tab）；指向已删除 Workspace 的关联单独归组并排到最后。
-侧栏图标：插件会把自己设置项的默认齿轮换成终端图标（对宿主 DOM 的装饰，找不到就什么都不做）。
+## Install
 
-### 可配置项
+`dsh plugin` forwards to pnpm in the profile directory, then reconciles the profile's bundle list. This package declares `dsh.bundle.patch`, so it **inserts itself** — no hand-edited profile patch.
 
-服务器：名称、主机、端口、用户名、面板类型、认证方式（SSH Agent / 指定私钥）、私钥路径、跳板机 ProxyJump、连接超时、保活间隔（ServerAliveInterval）、known_hosts 策略、登录 shell。
+```bash
+dsh plugin --profile web add github:telagod/dsh-ssh-workspace-manager
+```
 
-关联：Workspace、服务器、远程项目目录、环境（开发 / 测试 / 生产）、容器运行时、Compose 文件、Compose 项目名、同步排除项、是否默认关联。
+Restart the web profile afterwards. The bundle patch inserts plugin id `ssh-workspace-manager`.
 
-偏好（`preferences`）：新关联默认环境 / 运行时、默认 Compose 文件、新主机默认超时 / 保活 / known_hosts / 登录 shell、会话标题栏芯片开关。
+From a checkout (relative paths are anchored to your current directory, so this is the same install):
 
-- **保活**：`ServerAliveInterval=N` + `ServerAliveCountMax=3`，0 表示关闭；长任务建议 30。
-- **登录 shell**：远端命令包一层 `bash -lc`（没有 bash 时退回 `sh -lc`），能读到 `/etc/profile`、nvm、bun 等 PATH。
-- **同步排除**：rsync 走 `--exclude`，本机没有 rsync 退回 tar 时走 `--exclude=`；`ssh_sync` 调用里也能临时加。
+```bash
+git clone https://github.com/telagod/dsh-ssh-workspace-manager.git
+dsh plugin --profile web add ./dsh-ssh-workspace-manager
+```
 
-## 分工
+### Without the bundle layer
 
-- **人**：添加主机（Agent / 私钥）、测试连接、按需调默认值。不填绑定表，不在设置页敲命令。
-- **Agent**：`ssh_status`、`ssh_bind`、`ssh_unbind`、`ssh_exec`、`ssh_sync`、`ssh_compose`、`ssh_inspect`。当前 Workspace 未绑定就自己 `ssh_bind`。可直接传 `server` + `remotePath`，不必先有绑定。
-- **浏览器 RPC**：只暴露 `getState` / `saveServer` / `deleteServer` / `saveBinding` / `deleteBinding` / `savePreferences` / `testConnection` / `inspectServer`（最后两个是只读探测）。exec / sync / compose 不走 Typert。
+If you prefer to keep the profile patch yours, wire it by hand instead. Add the dependency to `profile/package.json`:
 
-SSH 需要 `~/.ssh` 和网络。Agent 调用走当前会话 sandbox；被拒后用 `sandbox_permissions: danger-full-access` + `justification` 重试一次（和 bash 相同）。设置页「测试连接」「探测主机」由人点，使用 `danger-full-access`。`ssh_sync deleteExtra` 和 `ssh_compose down` 会再问一次用户。
+```json
+"dsh-ssh-workspace-manager": "file:./plugins/dsh-ssh-workspace-manager"
+```
 
-`ssh_bind`：一个 Workspace 的**第一条**关联成为默认；后续绑定不会抢走，除非显式 `isDefault: true`。`remotePath` 必须是绝对路径，且不能是 `/`。不传 `role` / `runtime` / `composeFile` 时用「默认值与显示」里的偏好。
+and insert it in `profile/cordis.patch.yml`:
 
-## 包结构
+```yaml
+- insert:
+    - id: ssh-workspace-manager
+      name: dsh-ssh-workspace-manager
+```
 
-- `lib/index.js`：Host 服务、settings 持久化、SSH 操作、Agent tools。
-- `lib/client.js`：设置页和控制台、会话标题栏芯片、侧栏图标装饰。
-- `lib/typert.host.js` / `lib/typert.remote-client.js`：Typert 契约（仅设置页方法）。
-- `lib/ssh.test.js` / `lib/client.test.js`：`node --test` 单测（mock ctx + mock 远端；client 用假 window 求值）。
+The `file:` dependency must land in `node_modules` as a **symlink** to `plugins/`, never a copy — otherwise hot reload polls a directory you are not editing.
 
-## 测试
+**Do not keep both.** A profile is a *stack* of layer patches and a top-level `insert` **appends** — nothing merges two entries that share an id. Two entries with the same id fail the boot outright:
 
-    node --test lib/ssh.test.js lib/client.test.js
+    dsh: plugin tree failed to load: failed to apply loader entry include
+    (cordis:include): duplicate loader entry id: ssh-workspace-manager
 
-## 安装到 Web profile
+and two entries with *different* ids mount the plugin twice. So if you wired this plugin by hand **before 0.3.0**, delete that `insert` before running any `dsh plugin` command in that profile: reconciliation adds the bundle to `dsh.profile.bundles` on its own, and the next boot would fail.
 
-不要拷贝目录。先克隆，再把 profile 插件符号链接到仓库根（这个包的 `package.json` 在仓库根）：
+## Settings page
 
-    git clone https://github.com/telagod/dsh-ssh-workspace-manager.git ~/project/dsh-ssh-workspace-manager
-    ln -sfn ~/project/dsh-ssh-workspace-manager ~/.dsh/profiles/web/plugins/dsh-ssh-workspace-manager
+The page sits beside **General** and **Models** (sidebar: **SSH 远程**). The header carries only the title and a reload icon; the body has three tabs.
 
-`profile/package.json`：
+- **Servers** — one compact card per host. First line: name + `user@host:port` with a copy button, and icon buttons for *test connection*, *inspect*, *edit*, *delete*. Second line: badges for panel, auth, jump host, timeout, keepalive, known_hosts policy, and how many bindings use it. After an inspect, OS (kernel on hover), container runtime, detected panel and container count are appended. Results expand in place.
+- **Bindings** — grouped by workspace (title + local path + count). Each row carries the role badge, the default marker, the server, the remote directory, and runtime / compose / exclude badges, with icon buttons for *copy path*, *edit*, *unbind*.
+- **Preferences** — defaults for new bindings (role, runtime, compose file), new hosts (timeout, keepalive, known_hosts, login shell), and the session title-bar chip.
 
-    "dsh-ssh-workspace-manager": "file:./plugins/dsh-ssh-workspace-manager"
+Past four hosts or bindings a filter box appears at the right of the tab row; it filters the current tab only. Bindings pointing at a deleted workspace are grouped separately (`已删除的 Workspace`) and sorted last.
 
-`file:` 依赖必须是 `node_modules` → `plugins/` 的符号链接，不能是拷贝，否则 Client HMR 轮询的不是你正在改的文件。
+The sidebar icon is decorated: the plugin swaps its own settings entry's default gear for a terminal icon. It is best-effort DOM work on the host page — if the node is not found, it does nothing.
 
-`profile/cordis.patch.yml`：
+### Servers
 
-    - insert:
-        - id: ssh-workspace-manager
-          name: dsh-ssh-workspace-manager
+Name, host, port, username, panel type, auth method (SSH agent / identity file), identity file path, ProxyJump host, connect timeout, keepalive interval, known_hosts policy, login shell.
 
-Host 模块热更：`dsh-base` 默认关掉 `@cordisjs/plugin-hmr`。web profile 的 `cordis.patch.yml` 需要显式打开，并把 `root` 指到 `plugins/` **以及克隆下来的仓库路径**（Node 会 realpath 符号链接）。只改 `cordis.patch.yml` 才会走 `patchReload: live`。
+**Panel** is a label only (`plain` / `baota` / `aapanel` / `onepanel` / `plesk` / `cpanel`): it tells the model what is on the machine, and does not change the SSH command.
 
-Client 热更：`dsh-client-hmr` 每 500ms 轮询 `lib/client.js`。源码变更后浏览器会换插件，不必整页刷新；不需要 `pnpm run dev:web`（那是改 DSH 自己的 client 包时用的）。
+### Bindings
 
-## 使用
+Workspace, server, remote project directory, environment (`development` / `staging` / `production`), container runtime (`docker` / `podman` / `none`), compose file, compose project name, sync excludes, default flag.
 
-1. 设置 → SSH 远程：添加主机，点「测试连接」或「探测主机」。
-2. 在项目会话里让 Agent 干活（deploy / 远端 / 同步）。它会 `ssh_status` → 必要时 `ssh_bind` → `ssh_exec` / `ssh_sync` / `ssh_compose`。
-3. 设置页里的关联可以手动加/改/解除；Agent 也会自己维护。
+- **Keepalive** — `ServerAliveInterval=N` with `ServerAliveCountMax=3`; `0` disables it. 30 is the useful value for long tasks.
+- **Login shell** — wraps the remote command in `bash -lc`, falling back to `sh -lc`, so `/etc/profile` and with it nvm, bun and friends are on `PATH`.
+- **Excludes** — `--exclude` for rsync, `--exclude=` for the tar fallback; up to 50 patterns of 200 characters, comma or newline separated. `ssh_sync` calls may add more for one push.
 
-## 许可
+### Preferences
 
-MIT。
+`role`, `runtime`, `composeFile`, `hostKeyPolicy`, `connectTimeout`, `keepAlive`, `loginShell`, `showSessionChip` — the defaults a new host or binding starts from. Out-of-range values are clamped on save, so the stored state is always valid.
+
+## Agent tools
+
+| Tool | What it does |
+| --- | --- |
+| `ssh_status` | Lists hosts, bindings and the current workspace's binding. The agent is told to reach for it when the user mentions a server, deploy, 远端 or 服务器. |
+| `ssh_bind` | Records that this workspace deploys to *host + remotePath*, with `role`, `runtime`, `composeFile`, `containerProject` and `exclude`. The **first** binding for a workspace becomes the default; later ones do not steal it unless `isDefault: true`. `remotePath` must be absolute and not `/`. |
+| `ssh_unbind` | Removes one binding by id. |
+| `ssh_exec` | Runs a command after `cd` into the bound remote directory. Prefer it over ad-hoc `bash ssh`. Timeout 1s–300s. |
+| `ssh_sync` | Pushes the local workspace to the remote directory (`rsync -az`, `tar` when rsync is missing). `deleteExtra` removes remote-only files and asks the user first. |
+| `ssh_compose` | `ps` / `logs` / `up` / `down` in the bound remote directory. `down` asks the user first. |
+| `ssh_inspect` | Probes OS, kernel, container runtime, panel directories and running containers. |
+
+Any of these may take `server` + `remotePath` directly instead of a binding, so a first deploy does not need one.
+
+### Division of labor
+
+- **Human** — adds hosts in Settings → SSH 远程, tests the connection, adjusts defaults. Does not fill a binding form, does not type commands into the settings page.
+- **Agent** — owns every binding. Given a server and a project it calls `ssh_status`, binds the current workspace itself (inferring `remotePath` from the user's words, the repo name, or an `ssh_exec ls`), then works through the tools. It is told not to send the user to the binding form, and never to invent a host, password or key file.
+- **Browser RPC** — the settings page reaches the host through exactly eight Typert methods: `getState`, `saveServer`, `deleteServer`, `saveBinding`, `deleteBinding`, `savePreferences`, and the read-only probes `testConnection` / `inspectServer`. exec, sync and compose do **not** go through Typert; only the agent's tools reach them.
+
+### Sandbox and approvals
+
+SSH needs `~/.ssh` and the network, which a session sandbox may refuse. When a call is denied, the agent is instructed to retry that exact call **once** with `sandbox_permissions: danger-full-access` plus a one-sentence `justification` — the approval prompt raised by that retry is how the user consents. The settings page's *test connection* and *inspect* buttons are human-initiated and run with `danger-full-access` directly.
+
+`ssh_sync` with `deleteExtra` and `ssh_compose down` ask for confirmation separately, and are not retried after a rejection.
+
+## Storage
+
+Hosts, bindings and preferences persist in the `dsh-ssh` namespace of the profile's settings file (`$DSH_HOME/settings.yaml`, by default `~/.dsh/settings.yaml`). Nothing is written to the remote but what you asked for; no secrets beyond an optional identity-file *path* are stored here.
+
+## Package layout
+
+| File | Contents |
+| --- | --- |
+| `lib/index.js` | Host service, settings persistence, the SSH operations, the agent tools, the system-prompt section. |
+| `lib/client.js` | Settings page and console, the session title-bar chip, the sidebar icon decoration. |
+| `lib/typert.host.js` / `lib/typert.remote-client.js` | The Typert contract (settings-page methods only). |
+| `lib/ssh.test.js` / `lib/client.test.js` | `node --test` unit tests: the host service against a mocked `ctx` and a mocked remote, the client evaluated against a fake `window`. |
+| `cordis.patch.yml` | The bundle patch that inserts the plugin. |
+
+## Development
+
+```bash
+node --test lib/ssh.test.js lib/client.test.js
+```
+
+Verified on dsh `0.1.5-rc.1`, Node ≥ 22.
+
+**Host hot reload** — `dsh-base` ships `@cordisjs/plugin-hmr` disabled. Enable it in the profile's `cordis.patch.yml` and point `root` at `plugins/` **and at the checkout**, because Node resolves the symlink and the loader keys its cache on the real path:
+
+```yaml
+- id: hmr
+  disabled: false
+  config:
+    root:
+      - !!js dshHomePath('profiles', 'web', 'plugins')
+      - /path/to/dsh-ssh-workspace-manager
+```
+
+Only edits to `cordis.patch.yml` are picked up as a live patch reload; a change to plugin JS is seen by the HMR watcher.
+
+**Client hot reload** — `dsh-client-hmr` polls `lib/client.js` every 500 ms and replaces the plugin in the browser, so a source change needs no page refresh. This is unrelated to `pnpm run dev:web`, which is for developing DSH's own client packages.
+
+## Usage
+
+1. **Settings → SSH 远程**: add a host, press *Test connection*, optionally *Inspect*.
+2. In a project session, ask for the work ("deploy this", "sync to 38", 远端/服务器). The agent calls `ssh_status`, binds the workspace if needed, then `ssh_exec` / `ssh_sync` / `ssh_compose`.
+3. Bindings can be edited or removed by hand on the **Bindings** tab; the agent maintains them too.
+
+## License
+
+MIT.
