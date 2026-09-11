@@ -24,23 +24,20 @@ This plugin puts them there, once:
 
 ## Install
 
-This package deliberately does **not** declare `dsh.bundle` — see [why](#why-no-bundle-patch). It installs as a dependency of the profile, and the insert belongs in the profile's own patch layer.
-
-Clone it once, next to the profile:
+This package is a **bundle**: it declares `dsh.bundle.patch`, so `dsh plugin` installs it *and* appends it to `dsh.profile.bundles`. That is the shape the official tutorial requires of "a plugin users enable" — a package without `dsh.bundle` "still installs, but only as a plain dependency … Use that package format for a **library** that plugin packages import rather than a **plugin users enable**".
 
 ```bash
-git clone https://github.com/telagod/dsh-ssh-workspace-manager.git ~/project/dsh-ssh-workspace-manager
-ln -sfn ~/project/dsh-ssh-workspace-manager ~/.dsh/profiles/web/plugins/dsh-ssh-workspace-manager
-dsh plugin --profile web install
+dsh plugin --profile web add github:telagod/dsh-ssh-workspace-manager
 ```
 
-Add the dependency to `profile/package.json`:
+From a checkout (relative paths are anchored to your current directory, so this is the same install):
 
-```json
-"dsh-ssh-workspace-manager": "file:./plugins/dsh-ssh-workspace-manager"
+```bash
+git clone https://github.com/telagod/dsh-ssh-workspace-manager.git
+dsh plugin --profile web add ./dsh-ssh-workspace-manager
 ```
 
-and insert it in `profile/cordis.patch.yml`:
+Restart the web profile afterwards. The bundle patch inserts plugin id `ssh-workspace-manager`:
 
 ```yaml
 - insert:
@@ -48,20 +45,16 @@ and insert it in `profile/cordis.patch.yml`:
       name: dsh-ssh-workspace-manager
 ```
 
-The `file:` dependency must land in `node_modules` as a **symlink** to `plugins/`, never a copy — otherwise hot reload polls a directory you are not editing.
+Check the layer without booting: `dsh --profile web --dump-config` prints a `# == dsh-ssh-workspace-manager` section.
 
-Restart the web profile. If you would rather not clone anything, `dsh plugin --profile web add github:telagod/dsh-ssh-workspace-manager` installs the dependency as well; it prints `declares no dsh.bundle — installed as a plain dependency, not a profile layer`. That warning is expected — this package is *installed*, not layered — and the insert above is still yours to make.
+### Do not also insert it by hand
 
-### Why no bundle patch
-
-Reconciliation runs after *any* successful `dsh plugin` command in a profile, including read-only ones such as `--help` or `ls`, and appends every bundle-declaring dependency to `dsh.profile.bundles`. A profile is a *stack* of layer patches, and a top-level `insert` **appends**: nothing merges two entries that share an id. A self-inserting plugin therefore collides with any profile whose patch layer is maintained by hand, and the failure is a hard one:
+`dsh plugin` owns `dsh.profile.bundles` ("You never write a profile manifest by hand"), and a profile's `cordis.patch.yml` is the *user* layer — applied after every bundle layer, for overriding rows rather than for mounting what a bundle already mounts. A top-level `insert` **appends**: nothing merges two entries that share an id, so a hand-written copy alongside the bundle is a hard failure:
 
     dsh: plugin tree failed to load: failed to apply loader entry include
     (cordis:include): duplicate loader entry id: ssh-workspace-manager
 
-Two entries with *different* ids fail one layer deeper — the plugin mounts twice and the second `settings namespace "dsh-ssh" is already registered` throws. Keeping the insert in the profile's own patch layer avoids the whole class: the plugin is installed as a plain dependency, and exactly one layer mounts it.
-
-**Do not also list it in `dsh.profile.bundles`.** The install id is `ssh-workspace-manager`, and it must be mounted by exactly one entry.
+Two entries with *different* ids fail one layer deeper — the plugin mounts twice and the second `settings namespace "dsh-ssh" is already registered` throws. If you wired this plugin by hand before it shipped a bundle, delete that `insert`: reconciliation adds the bundle on its own after any successful `dsh plugin` command in that profile.
 
 ## Settings page
 

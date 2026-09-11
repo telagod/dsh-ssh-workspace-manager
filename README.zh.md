@@ -24,23 +24,20 @@
 
 ## 安装
 
-本包**刻意不声明** `dsh.bundle`——原因见 [为什么不带 bundle patch](#为什么不带-bundle-patch)。它作为 profile 的一个依赖安装，插入权留在 profile 自己的 patch 层里。
-
-先把仓库克隆到 profile 旁边：
+本包是一个 **bundle**：声明了 `dsh.bundle.patch`，所以 `dsh plugin` 会装上它，**并且**把它追加进 `dsh.profile.bundles`。这正是官方教程对「用户启用的插件」要求的形态——没有 `dsh.bundle` 的包「仍能安装，但只是普通依赖……那种包格式是给插件引用的**库**用的，不是给用户启用的**插件**用的」。
 
 ```bash
-git clone https://github.com/telagod/dsh-ssh-workspace-manager.git ~/project/dsh-ssh-workspace-manager
-ln -sfn ~/project/dsh-ssh-workspace-manager ~/.dsh/profiles/web/plugins/dsh-ssh-workspace-manager
-dsh plugin --profile web install
+dsh plugin --profile web add github:telagod/dsh-ssh-workspace-manager
 ```
 
-在 `profile/package.json` 里加依赖：
+从本地克隆装（相对路径会被锚定到你当前所在目录，所以这是同一次安装）：
 
-```json
-"dsh-ssh-workspace-manager": "file:./plugins/dsh-ssh-workspace-manager"
+```bash
+git clone https://github.com/telagod/dsh-ssh-workspace-manager.git
+dsh plugin --profile web add ./dsh-ssh-workspace-manager
 ```
 
-在 `profile/cordis.patch.yml` 里插入：
+装完重启 web profile。bundle patch 插入的插件 id 是 `ssh-workspace-manager`：
 
 ```yaml
 - insert:
@@ -48,20 +45,16 @@ dsh plugin --profile web install
       name: dsh-ssh-workspace-manager
 ```
 
-`file:` 依赖必须最终是 `node_modules` → `plugins/` 的**符号链接**，不能是拷贝，否则热重载轮询的不是你正在改的目录。
+不启动也能看这一层：`dsh --profile web --dump-config` 会打印出 `# == dsh-ssh-workspace-manager` 那一段。
 
-装完重启 web profile。不想克隆的话，`dsh plugin --profile web add github:telagod/dsh-ssh-workspace-manager` 也会装依赖，只是会打印一句 `declares no dsh.bundle — installed as a plain dependency, not a profile layer`。这句警告是预期的——本包是被**安装**的，不是被叠成一层——上面那条 insert 仍然要你自己加。
+### 不要同时又手工插一遍
 
-### 为什么不带 bundle patch
-
-校正发生在 profile 里**任何一条**成功的 `dsh plugin` 命令之后，包括 `--help`、`ls` 这类只读命令；它会把每个声明了 bundle 的依赖追加进 `dsh.profile.bundles`。而 profile 是**一层层叠上去**的 patch，顶层 `insert` 是**追加**：id 相同也不会合并。于是「自己插入自己」的插件，必然和任何手工维护 patch 层的 profile 撞车，而且是硬失败：
+`dsh.profile.bundles` 归 `dsh plugin` 管（官方原文：You never write a profile manifest by hand），而 profile 的 `cordis.patch.yml` 是**用户层**——在所有 bundle 层之后应用，用来**覆盖行**，不是用来挂载 bundle 已经挂载的东西。顶层 `insert` 是**追加**：id 相同也不会合并，所以手写一份和 bundle 并存就是硬失败：
 
     dsh: plugin tree failed to load: failed to apply loader entry include
     (cordis:include): duplicate loader entry id: ssh-workspace-manager
 
-两条**不同** id 的条目则在更深一层失败——插件被挂两遍，第二次 `settings namespace "dsh-ssh" is already registered` 抛错。把 insert 留在 profile 自己的 patch 层里就绕开了整类问题：包只作为普通依赖安装，挂载它的永远只有一层。
-
-**不要同时把它列进 `dsh.profile.bundles`。**安装 id 是 `ssh-workspace-manager`，它只能被一条条目挂载。
+两条**不同** id 的条目则在更深一层失败——插件被挂两遍，第二次 `settings namespace "dsh-ssh" is already registered` 抛错。如果你在本插件带上 bundle 之前是手工接的，请删掉那条 `insert`：校正会在该 profile 任何一条成功的 `dsh plugin` 命令之后自己把 bundle 加进去。
 
 ## 设置页
 

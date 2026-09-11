@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.3.2
+
+**Restored the bundle patch.** 0.3.1 pulled it after a false alarm. That was the wrong
+call, and the official tutorial is explicit about why: a package without `dsh.bundle`
+"still installs, but only as a plain dependency … Use that package format for a
+**library** that plugin packages import rather than a **plugin users enable**"
+(`docs/user/develop/basic/publish.md`). This is a plugin users enable. No `lib/` change.
+
+### Why 0.3.1 was wrong
+
+The collision 0.3.1 was reacting to is real, but its cause is a profile that mounts by
+hand a package that also declares a bundle — never the bundle itself. The documented
+workflow cannot produce that state: `dsh plugin` owns `dsh.profile.bundles` ("You never
+write a profile manifest by hand"), and a profile's `cordis.patch.yml` is the *user*
+layer — applied after every bundle layer, for overriding rows, not for mounting what a
+bundle already mounts. The fix belongs in such a profile, not in the package.
+
+### Restored
+
+- `cordis.patch.yml` and the `dsh.bundle` declaration; `files[]` ships the patch again,
+  and CI requires a declared patch to be shipped.
+- `dsh plugin --profile web add github:telagod/dsh-ssh-workspace-manager` inserts the
+  plugin itself again, with no hand-edited profile patch. Verify with
+  `dsh --profile web --dump-config | grep ssh-workspace-manager`.
+
+### Kept from 0.3.1
+
+- The README's account of the failure modes: a top-level `insert` appends, so two
+  entries with the same id fail the boot with `duplicate loader entry id`, and two with
+  different ids mount the plugin twice (`settings namespace "dsh-ssh" is already
+  registered`). It is now framed as *do not also insert it by hand* — which is what the
+  docs imply, and what a profile migrating from the hand-wired shape has to undo.
+
 ## 0.3.1
 
 **Reverted the bundle patch shipped in 0.3.0.** The plugin no longer declares

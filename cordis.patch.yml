@@ -1,0 +1,8 @@
+# dsh-ssh-workspace-manager: SSH hosts, workspace bindings, remote exec/sync/compose.
+# This is the bundle layer `dsh plugin` appends to dsh.profile.bundles -- the shape
+# the official tutorial requires of "a plugin users enable" (a package without
+# dsh.bundle is for libraries). Do not also insert it in a profile's
+# cordis.patch.yml: a top-level insert appends, so a duplicate id fails the boot.
+- insert:
+    - id: ssh-workspace-manager
+      name: dsh-ssh-workspace-manager
