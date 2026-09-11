@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.3.1
+
+**Reverted the bundle patch shipped in 0.3.0.** The plugin no longer declares
+`dsh.bundle` and no longer inserts itself — the insert belongs in the profile's
+own patch layer. No `lib/` change.
+
+### Why
+
+Reconciliation runs after *any* successful `dsh plugin` command in a profile,
+including read-only ones such as `--help` or `ls`, and appends every
+bundle-declaring dependency to `dsh.profile.bundles`. A profile is a stack of
+layer patches and a top-level `insert` appends: two entries with the same id fail
+the boot outright (`duplicate loader entry id: ssh-workspace-manager`), and two
+with different ids mount the plugin twice (`settings namespace "dsh-ssh" is
+already registered`). A self-inserting plugin therefore collides with any profile
+whose patch layer is maintained by hand — which is the normal case here. Verified
+against `dsh-app-boot`'s `applyEntryPatches` (the code `--dump-config` and
+mounting share) and by booting scratch profiles both ways.
+
+### Changed
+
+- Removed `cordis.patch.yml` and the `dsh.bundle` declaration; `files[]` no
+  longer ships the patch.
+- `dsh plugin --profile web add github:telagod/dsh-ssh-workspace-manager` still
+  installs the dependency, and prints `declares no dsh.bundle — installed as a
+  plain dependency, not a profile layer`. That is now the intended shape: install
+  through the CLI, mount through your own patch layer.
+- README (both languages): manual wiring is the install path again, with a *Why no
+  bundle patch* section recording both failure modes.
+
+### Migrating
+
+If you added this package as a bundle during 0.3.0's window, reconciliation removes
+it from `dsh.profile.bundles` on the next `dsh plugin` command, which would leave
+the plugin unmounted. Put the insert back in `profile/cordis.patch.yml`:
+
+```yaml
+- insert:
+    - id: ssh-workspace-manager
+      name: dsh-ssh-workspace-manager
+```
+
 ## 0.3.0
 
 Packaging pass: the plugin can install itself as a profile layer. No `lib/` change.

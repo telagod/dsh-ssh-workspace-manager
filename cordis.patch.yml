@@ -1,6 +1,0 @@
-# dsh-ssh-workspace-manager: SSH hosts, workspace bindings, remote exec/sync/compose.
-# Humans touch only the settings page (add a host, test it); the agent owns
-# bindings and never sends the user to the binding form.
-- insert:
-    - id: ssh-workspace-manager
-      name: dsh-ssh-workspace-manager

@@ -21,9 +21,9 @@ jobs:
       - run: node --check lib/client.js
       - run: node --check lib/typert.host.js
       - run: node --check lib/typert.remote-client.js
-      # Packaging drift: every path in files[] must exist, and the bundle patch
-      # must be both declared and shipped, or `dsh plugin add` silently stops
-      # inserting the plugin and installs it as a plain dependency.
+      # Packaging drift: every path in files[] must exist. If the package ever
+      # declares a bundle patch again, it has to be shipped too — a declared but
+      # unshipped patch makes `dsh plugin add` insert nothing.
       - run: |
           node -e '
           const fs = require("node:fs");
@@ -31,8 +31,7 @@ jobs:
           const missing = (pkg.files ?? []).filter((f) => !fs.existsSync(f));
           if (missing.length) throw new Error("files[] paths do not exist: " + missing.join(", "));
           const patch = pkg.dsh?.bundle?.patch;
-          if (!patch) throw new Error("package.json declares no dsh.bundle.patch");
-          if (!(pkg.files ?? []).includes(patch.replace("./", ""))) throw new Error("bundle patch is declared but not shipped in files[]: " + patch);
-          console.log("manifest ok: " + pkg.name + "@" + pkg.version + " ships " + patch);
+          if (patch && !(pkg.files ?? []).includes(patch.replace("./", ""))) throw new Error("bundle patch is declared but not shipped in files[]: " + patch);
+          console.log("manifest ok: " + pkg.name + "@" + pkg.version + (patch ? " ships " + patch : " (no bundle patch declared)"));
           '
       - run: node --test lib/ssh.test.js lib/client.test.js

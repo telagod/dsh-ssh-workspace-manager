@@ -24,24 +24,17 @@ This plugin puts them there, once:
 
 ## Install
 
-`dsh plugin` forwards to pnpm in the profile directory, then reconciles the profile's bundle list. This package declares `dsh.bundle.patch`, so it **inserts itself** — no hand-edited profile patch.
+This package deliberately does **not** declare `dsh.bundle` — see [why](#why-no-bundle-patch). It installs as a dependency of the profile, and the insert belongs in the profile's own patch layer.
+
+Clone it once, next to the profile:
 
 ```bash
-dsh plugin --profile web add github:telagod/dsh-ssh-workspace-manager
+git clone https://github.com/telagod/dsh-ssh-workspace-manager.git ~/project/dsh-ssh-workspace-manager
+ln -sfn ~/project/dsh-ssh-workspace-manager ~/.dsh/profiles/web/plugins/dsh-ssh-workspace-manager
+dsh plugin --profile web install
 ```
 
-Restart the web profile afterwards. The bundle patch inserts plugin id `ssh-workspace-manager`.
-
-From a checkout (relative paths are anchored to your current directory, so this is the same install):
-
-```bash
-git clone https://github.com/telagod/dsh-ssh-workspace-manager.git
-dsh plugin --profile web add ./dsh-ssh-workspace-manager
-```
-
-### Without the bundle layer
-
-If you prefer to keep the profile patch yours, wire it by hand instead. Add the dependency to `profile/package.json`:
+Add the dependency to `profile/package.json`:
 
 ```json
 "dsh-ssh-workspace-manager": "file:./plugins/dsh-ssh-workspace-manager"
@@ -57,12 +50,18 @@ and insert it in `profile/cordis.patch.yml`:
 
 The `file:` dependency must land in `node_modules` as a **symlink** to `plugins/`, never a copy — otherwise hot reload polls a directory you are not editing.
 
-**Do not keep both.** A profile is a *stack* of layer patches and a top-level `insert` **appends** — nothing merges two entries that share an id. Two entries with the same id fail the boot outright:
+Restart the web profile. If you would rather not clone anything, `dsh plugin --profile web add github:telagod/dsh-ssh-workspace-manager` installs the dependency as well; it prints `declares no dsh.bundle — installed as a plain dependency, not a profile layer`. That warning is expected — this package is *installed*, not layered — and the insert above is still yours to make.
+
+### Why no bundle patch
+
+Reconciliation runs after *any* successful `dsh plugin` command in a profile, including read-only ones such as `--help` or `ls`, and appends every bundle-declaring dependency to `dsh.profile.bundles`. A profile is a *stack* of layer patches, and a top-level `insert` **appends**: nothing merges two entries that share an id. A self-inserting plugin therefore collides with any profile whose patch layer is maintained by hand, and the failure is a hard one:
 
     dsh: plugin tree failed to load: failed to apply loader entry include
     (cordis:include): duplicate loader entry id: ssh-workspace-manager
 
-and two entries with *different* ids mount the plugin twice. So if you wired this plugin by hand **before 0.3.0**, delete that `insert` before running any `dsh plugin` command in that profile: reconciliation adds the bundle to `dsh.profile.bundles` on its own, and the next boot would fail.
+Two entries with *different* ids fail one layer deeper — the plugin mounts twice and the second `settings namespace "dsh-ssh" is already registered` throws. Keeping the insert in the profile's own patch layer avoids the whole class: the plugin is installed as a plain dependency, and exactly one layer mounts it.
+
+**Do not also list it in `dsh.profile.bundles`.** The install id is `ssh-workspace-manager`, and it must be mounted by exactly one entry.
 
 ## Settings page
 
@@ -132,7 +131,6 @@ Hosts, bindings and preferences persist in the `dsh-ssh` namespace of the profil
 | `lib/client.js` | Settings page and console, the session title-bar chip, the sidebar icon decoration. |
 | `lib/typert.host.js` / `lib/typert.remote-client.js` | The Typert contract (settings-page methods only). |
 | `lib/ssh.test.js` / `lib/client.test.js` | `node --test` unit tests: the host service against a mocked `ctx` and a mocked remote, the client evaluated against a fake `window`. |
-| `cordis.patch.yml` | The bundle patch that inserts the plugin. |
 
 ## Development
 
